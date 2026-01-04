@@ -9,7 +9,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
     <style>
@@ -23,18 +22,18 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #f97316; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        /* Loader */
+        .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #f97316; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        /* Disabled State */
-        .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
 
-    <!-- LOADING OVERLAY -->
+    <!-- LOADER -->
     <div id="globalLoader" class="loading-overlay hidden">
-        <div class="loader w-10 h-10 mb-4"></div>
-        <p class="text-sm font-bold text-slate-600 blink" id="loadingText">Menghubungkan ke Database...</p>
+        <div class="spinner mb-4"></div>
+        <p class="text-sm font-bold text-slate-600 animate-pulse" id="loadingText">Menghubungkan...</p>
     </div>
 
     <!-- HEADER -->
@@ -50,11 +49,9 @@
                 </p>
             </div>
         </div>
-        <div class="flex items-center gap-3">
-             <button onclick="fetchDataFromServer()" class="bg-slate-100 p-2 rounded-full hover:bg-slate-200 text-slate-500">
-                <i data-lucide="refresh-cw" size="16"></i>
-             </button>
-        </div>
+        <button onclick="fetchDataFromServer()" class="bg-slate-100 p-2 rounded-full hover:bg-slate-200 text-slate-500">
+            <i data-lucide="refresh-cw" size="16"></i>
+        </button>
     </header>
 
     <!-- CONTENT -->
@@ -272,10 +269,10 @@
     <!-- JAVASCRIPT LOGIC -->
     <script>
         // === CONFIG ===
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx3XED-KWZB6R5EdEgLSxPV2GFYvtHkBTZqEduFyWbrvpN9k-sRzp3SJIjhVQacsr65/exec"; // Ganti ini!
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/library/d/1zhVgJiz9oxf0uMaT7Sb5g8X8wfjhhDlC7dJ5-Od2n2b-8TPgB__Nuajs/2"; 
         const PRICES = {"Calistung": 150000, "Mengaji": 100000, "Matematika SD": 200000, "Bahasa Inggris": 250000, "Coding": 300000};
 
-        // === STATE (Dimulai Kosong) ===
+        // === STATE ===
         let STUDENTS = [];
         let EXPENSES = [];
         let selectedStudentId = null;
@@ -287,34 +284,31 @@
             initFormOptions();
             
             // Auto fetch if URL is set
-            if(GOOGLE_SCRIPT_URL !== "MASUKKAN_URL_DEPLOYMENT_DISINI") {
+            if(GOOGLE_SCRIPT_URL.includes("http")) {
                 fetchDataFromServer();
             } else {
-                alert("PENTING: Anda belum memasukkan URL Google Script di kode HTML. Aplikasi masih kosong.");
+                alert("PENTING: Masukkan URL Google Script Anda di kode HTML (Baris ~320).");
+                hideLoader();
             }
         });
 
         // === API HANDLER ===
         async function fetchDataFromServer() {
-            showLoader("Mengambil data terbaru...");
+            showLoader("Mengambil data...");
             try {
-                // Tambahkan parameter ?action=getData di URL untuk memanggil fungsi doGet
+                // Fetch GET
                 const response = await fetch(GOOGLE_SCRIPT_URL + "?action=getData");
                 const data = await response.json();
                 
                 if(data.status === "empty") {
-                    // Jika kosong, inisialisasi sheet
                     await fetch(GOOGLE_SCRIPT_URL + "?action=init");
-                    hideLoader();
-                    alert("Database baru berhasil dibuat! Silakan refresh.");
+                    location.reload();
                     return;
                 }
 
-                // Update State
                 STUDENTS = data.students || [];
                 EXPENSES = data.expenses || [];
                 
-                // Refresh UI
                 updateDashboard();
                 renderStudentList();
                 renderFinancialLogs();
@@ -323,32 +317,23 @@
             } catch (err) {
                 hideLoader();
                 console.error(err);
-                alert("Gagal mengambil data. Cek koneksi atau URL Script.");
+                alert("Gagal koneksi. Pastikan URL benar & Deployment diset ke 'Anyone'.");
             }
         }
 
         async function sendData(payload) {
-            showLoader("Menyimpan data...");
+            showLoader("Menyimpan...");
             try {
-                // Gunakan POST dengan mode 'no-cors' jika mengalami masalah CORS, 
-                // tapi idealnya return JSON dari GAS untuk konfirmasi.
-                // Disini kita gunakan fetch standard.
-                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                // Fetch POST
+                await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify(payload)
                 });
-                const result = await response.json();
-                
-                if(result.status === "success") {
-                    await fetchDataFromServer(); // Refresh data agar sinkron
-                } else {
-                    alert("Error: " + result.msg);
-                    hideLoader();
-                }
+                // Refresh data setelah simpan agar sinkron
+                await fetchDataFromServer();
             } catch (err) {
                 hideLoader();
-                console.error(err);
-                alert("Terjadi kesalahan koneksi.");
+                alert("Gagal menyimpan data.");
             }
         }
 
@@ -436,7 +421,6 @@
             const select = document.getElementById('regProgram');
             const options = [...Object.keys(PRICES), "Lainnya"];
             select.innerHTML = options.map(p => `<option value="${p}">${p}</option>`).join('');
-            
             const today = new Date().toISOString().split('T')[0];
             ['regDate', 'attDate', 'payDate', 'expDate'].forEach(id => document.getElementById(id).value = today);
         }
@@ -451,14 +435,14 @@
             document.getElementById(`nav-${pageId}`)?.classList.add('active');
             document.getElementById(`nav-${pageId}`)?.classList.replace('text-slate-400', 'text-orange-500');
             
-            if(pageId === 'academic') renderStudentList(); // Re-render to ensure fresh data
+            if(pageId === 'academic') renderStudentList();
         }
 
         function toggleOtherProgram(el) {
             document.getElementById('regProgramOther').classList.toggle('hidden', el.value !== 'Lainnya');
         }
 
-        // === RENDER LOGIC (Sama seperti sebelumnya, tapi baca dari variable global) ===
+        // === RENDER LOGIC ===
         function renderStudentList() {
             const q = document.getElementById('searchStudent').value.toLowerCase();
             const container = document.getElementById('studentListContainer');
@@ -488,7 +472,6 @@
             document.getElementById('viewParent').innerText = s.parent;
             document.getElementById('viewJoin').innerText = s.joinDate;
             
-            // Reset & Render Logs
             switchTab('profile');
             document.getElementById('attendanceList').innerHTML = s.attendance.map(a => `<div class="flex justify-between bg-slate-50 p-2 rounded text-xs border border-slate-100"><span>${a.date}</span><span class="font-bold">${a.status}</span></div>`).join('');
             document.getElementById('paymentList').innerHTML = s.payments.map(p => `<div class="flex justify-between bg-slate-50 p-2 rounded text-xs border border-slate-100"><span>${p.date} (${p.note||'-'})</span><span class="font-bold text-green-600">+ Rp ${parseInt(p.amount).toLocaleString()}</span></div>`).join('');
@@ -517,7 +500,7 @@
             document.getElementById('shareInvestor').innerText = "Rp " + (profit > 0 ? (profit*0.55).toLocaleString() : 0);
             document.getElementById('shareOperator').innerText = "Rp " + (profit > 0 ? (profit*0.45).toLocaleString() : 0);
 
-            // Chart Logic (Simplified)
+            // Chart
             const mRev = [0,0,0,0,0,0], mData = {};
             STUDENTS.forEach(s => s.payments.forEach(p => {
                 const m = new Date(p.date).getMonth(); if(m<6) mRev[m] += parseInt(p.amount);
@@ -532,12 +515,8 @@
         }
 
         function renderFinancialLogs() {
-            // Expenses
             document.getElementById('expenseTableBody').innerHTML = EXPENSES.map(e => `<tr class="border-b border-slate-50"><td class="p-3">${e.date}</td><td class="p-3">${e.category}<br><span class="text-[10px] text-slate-400">${e.desc}</span></td><td class="p-3 text-right font-bold text-red-500">- Rp ${parseInt(e.amount).toLocaleString()}</td></tr>`).join('');
-            
-            // Incomes (Flatten)
-            let inc = [];
-            STUDENTS.forEach(s => s.payments.forEach(p => inc.push({d:p.date, n:s.name, a:p.amount})));
+            let inc = []; STUDENTS.forEach(s => s.payments.forEach(p => inc.push({d:p.date, n:s.name, a:p.amount})));
             inc.sort((a,b)=>new Date(b.d)-new Date(a.d));
             document.getElementById('transactionTableBody').innerHTML = inc.map(i => `<tr class="border-b border-slate-50"><td class="p-3">${i.d}</td><td class="p-3">${i.n}</td><td class="p-3 text-right font-bold text-green-600">+ Rp ${parseInt(i.a).toLocaleString()}</td></tr>`).join('');
         }
